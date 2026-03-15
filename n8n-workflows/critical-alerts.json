@@ -1,0 +1,156 @@
+{
+  "name": "Critical Alerts — Immediate Notifications",
+  "nodes": [
+    {
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 300],
+      "parameters": {
+        "operation": "onChange",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Inventory",
+        "pollTimes": { "item": [{ "mode": "everyMinute", "minute": 5 }] }
+      }
+    },
+    {
+      "name": "Check Inventory Level",
+      "type": "n8n-nodes-base.if",
+      "position": [500, 200],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            { "value1": "={{$json.isLow}}", "value2": true }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Check Budget Alert",
+      "type": "n8n-nodes-base.if",
+      "position": [500, 400],
+      "parameters": {
+        "conditions": {
+          "number": [
+            { "value1": "={{$json.variancePercent}}", "operation": "smallerEqual", "value2": 10 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Send WhatsApp — Inventory",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_SITE_NUMBER}}",
+          "message": "🚨 LOW STOCK ALERT: {{$json.materialName}} — Only {{$json.closingStock}} {{$json.unit}} remaining (reorder level: {{$json.reorderLevel}})"
+        }
+      }
+    },
+    {
+      "name": "Send Email — Inventory",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [750, 250],
+      "parameters": {
+        "to": "={{$env.PROJECT_MANAGER_EMAIL}}",
+        "subject": "ALERT: {{$json.materialName}} below reorder level",
+        "text": "Material: {{$json.materialName}}\nCurrent Stock: {{$json.closingStock}} {{$json.unit}}\nReorder Level: {{$json.reorderLevel}}\n\nPlease create a Purchase Order immediately."
+      }
+    },
+    {
+      "name": "Send WhatsApp — Budget",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_MANAGER_NUMBER}}",
+          "message": "⚠️ BUDGET ALERT: {{$json.category}} at {{100 - $json.variancePercent}}% utilization. Variance: ₹{{$json.variance}}"
+        }
+      }
+    },
+    {
+      "name": "Safety Incident Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 600],
+      "parameters": {
+        "operation": "onNewRow",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Safety Log"
+      }
+    },
+    {
+      "name": "Check Severity",
+      "type": "n8n-nodes-base.if",
+      "position": [500, 600],
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.severity}}", "operation": "equal", "value2": "high" },
+            { "value1": "={{$json.severity}}", "operation": "equal", "value2": "critical" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Send WhatsApp + SMS — Safety",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_SAFETY_GROUP}}",
+          "message": "🚨 SAFETY INCIDENT: {{$json.incidentType}}\nLocation: {{$json.location}}\nDescription: {{$json.description}}\nSeverity: {{$json.severity}}\nReported by: {{$json.reportedBy}}"
+        }
+      }
+    },
+    {
+      "name": "Quality Test Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 800],
+      "parameters": {
+        "operation": "onNewRow",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Quality Checks"
+      }
+    },
+    {
+      "name": "Check QC Result",
+      "type": "n8n-nodes-base.if",
+      "position": [500, 800],
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.result}}", "operation": "equal", "value2": "fail" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Send Alert — QC Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 800],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_MANAGER_NUMBER}}",
+          "message": "❌ QUALITY CHECK FAILED\nType: {{$json.checkType}}\nElement: {{$json.element}}\nStandard: {{$json.standard}}\nObserved: {{$json.observedValue}}\nAction required immediately."
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": { "main": [[ { "node": "Check Inventory Level" }, { "node": "Check Budget Alert" } ]] },
+    "Check Inventory Level": { "main": [[ { "node": "Send WhatsApp — Inventory" }, { "node": "Send Email — Inventory" } ]] },
+    "Check Budget Alert": { "main": [[ { "node": "Send WhatsApp — Budget" } ]] },
+    "Safety Incident Trigger": { "main": [[ { "node": "Check Severity" } ]] },
+    "Check Severity": { "main": [[ { "node": "Send WhatsApp + SMS — Safety" } ]] },
+    "Quality Test Trigger": { "main": [[ { "node": "Check QC Result" } ]] },
+    "Check QC Result": { "main": [[ { "node": "Send Alert — QC Failure" } ]] }
+  }
+}

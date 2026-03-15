@@ -1,0 +1,125 @@
+{
+  "name": "Weekly Reports — Sunday 8 PM",
+  "nodes": [
+    {
+      "name": "Sunday 8PM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300],
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtDay": 0, "triggerAtHour": 20 }] }
+      }
+    },
+    {
+      "name": "Fetch Weekly Expenses",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 150],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Expense Log"
+      }
+    },
+    {
+      "name": "Generate Expense PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.PDF_GENERATOR_URL}}",
+        "body": { "template": "weekly-expense", "data": "={{$json}}" }
+      }
+    },
+    {
+      "name": "Email Expense Report",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [1000, 150],
+      "parameters": {
+        "to": "={{$env.PROJECT_MANAGER_EMAIL}}",
+        "subject": "Weekly Expense Summary — {{$today.format('DD MMM YYYY')}}",
+        "text": "Please find attached the weekly expense summary report.",
+        "attachments": "={{$json.pdfUrl}}"
+      }
+    },
+    {
+      "name": "Fetch Schedule Progress",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 300],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Project Schedule"
+      }
+    },
+    {
+      "name": "Send Progress vs Schedule",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [750, 300],
+      "parameters": {
+        "to": "={{$env.PROJECT_MANAGER_EMAIL}}",
+        "subject": "Progress vs Schedule — Week Ending {{$today.format('DD MMM')}}",
+        "text": "Weekly progress summary:\n\n{{$json.summary}}\n\nDelayed tasks: {{$json.delayedCount}}\nCompleted this week: {{$json.completedCount}}"
+      }
+    },
+    {
+      "name": "Send WhatsApp Progress",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_MANAGER_NUMBER}}",
+          "message": "📊 WEEKLY PROGRESS REPORT\n\nOverall: {{$json.overallProgress}}%\nTasks completed: {{$json.completedCount}}\nDelayed: {{$json.delayedCount}}\n\nFull report sent via email."
+        }
+      }
+    },
+    {
+      "name": "Fetch Material Consumption",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 550],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Material Summary"
+      }
+    },
+    {
+      "name": "Email Material Report",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [750, 550],
+      "parameters": {
+        "to": "={{$env.PROJECT_MANAGER_EMAIL}}",
+        "subject": "Material Consumption Report — Week {{$today.format('W')}}",
+        "text": "Material consumption and wastage report for the week.\n\n{{$json.summary}}"
+      }
+    },
+    {
+      "name": "Fetch Cash Flow",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 700],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Cash Flow"
+      }
+    },
+    {
+      "name": "Email Cash Flow Forecast",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [750, 700],
+      "parameters": {
+        "to": "={{$env.OWNER_EMAIL}}",
+        "subject": "Cash Flow Forecast — Week {{$today.format('W')}}",
+        "text": "Current Balance: ₹{{$json.currentBalance}}\nWeekly Inflow: ₹{{$json.weeklyInflow}}\nWeekly Outflow: ₹{{$json.weeklyOutflow}}\n\nProjected balance next week: ₹{{$json.projectedBalance}}"
+      }
+    }
+  ],
+  "connections": {
+    "Sunday 8PM Trigger": { "main": [[ { "node": "Fetch Weekly Expenses" }, { "node": "Fetch Schedule Progress" }, { "node": "Fetch Material Consumption" }, { "node": "Fetch Cash Flow" } ]] },
+    "Fetch Weekly Expenses": { "main": [[ { "node": "Generate Expense PDF" } ]] },
+    "Generate Expense PDF": { "main": [[ { "node": "Email Expense Report" } ]] },
+    "Fetch Schedule Progress": { "main": [[ { "node": "Send Progress vs Schedule" }, { "node": "Send WhatsApp Progress" } ]] },
+    "Fetch Material Consumption": { "main": [[ { "node": "Email Material Report" } ]] },
+    "Fetch Cash Flow": { "main": [[ { "node": "Email Cash Flow Forecast" } ]] }
+  }
+}

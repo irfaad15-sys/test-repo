@@ -1,0 +1,113 @@
+{
+  "name": "Daily Operations — Morning/Evening Automations",
+  "nodes": [
+    {
+      "name": "Morning Trigger (8 AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 200],
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtHour": 8, "triggerAtMinute": 0 }] }
+      }
+    },
+    {
+      "name": "Send Daily Log Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_SUPERVISOR_NUMBER}}",
+          "message": "📋 Good morning! Please fill today's Daily Log.\n\nDate: {{$today.format('DD-MM-YYYY')}}\n\nRemember to log:\n• Work description\n• Material usage\n• Labor count\n• Issues/concerns\n• Tomorrow's plan"
+        }
+      }
+    },
+    {
+      "name": "Fetch Tasks Due Today",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 350],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Task Tracker",
+        "filters": { "column": "date", "value": "={{$today.format('YYYY-MM-DD')}}" }
+      }
+    },
+    {
+      "name": "Send Tasks Due Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_SITE_NUMBER}}",
+          "message": "📌 TASKS DUE TODAY:\n{{$json.tasks.map(t => '• ' + t.taskDescription + ' → ' + t.assignedTo).join('\\n')}}"
+        }
+      }
+    },
+    {
+      "name": "Fetch PO Deliveries Today",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 500],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Purchase Orders",
+        "filters": { "column": "expectedDelivery", "value": "={{$today.format('YYYY-MM-DD')}}" }
+      }
+    },
+    {
+      "name": "Send Delivery Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 500],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_SITE_NUMBER}}",
+          "message": "🚚 DELIVERIES EXPECTED TODAY:\n{{$json.orders.map(o => '• PO ' + o.poId + ' from ' + o.vendorName).join('\\n')}}\n\nPlease prepare for receiving and QC."
+        }
+      }
+    },
+    {
+      "name": "Evening Trigger (6 PM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 700],
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtHour": 18, "triggerAtMinute": 0 }] }
+      }
+    },
+    {
+      "name": "Fetch Today's Attendance",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 700],
+      "parameters": {
+        "operation": "read",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Labor Attendance",
+        "filters": { "column": "date", "value": "={{$today.format('YYYY-MM-DD')}}" }
+      }
+    },
+    {
+      "name": "Send Attendance Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [750, 700],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$env.WHATSAPP_MANAGER_NUMBER}}",
+          "message": "👷 TODAY'S ATTENDANCE SUMMARY:\nTotal Present: {{$json.presentCount}}\nTotal Absent: {{$json.absentCount}}\nOvertime Hours: {{$json.totalOT}}\nTotal Wages: ₹{{$json.totalWages}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Morning Trigger (8 AM)": { "main": [[ { "node": "Send Daily Log Reminder" }, { "node": "Fetch Tasks Due Today" }, { "node": "Fetch PO Deliveries Today" } ]] },
+    "Fetch Tasks Due Today": { "main": [[ { "node": "Send Tasks Due Alert" } ]] },
+    "Fetch PO Deliveries Today": { "main": [[ { "node": "Send Delivery Alert" } ]] },
+    "Evening Trigger (6 PM)": { "main": [[ { "node": "Fetch Today's Attendance" } ]] },
+    "Fetch Today's Attendance": { "main": [[ { "node": "Send Attendance Summary" } ]] }
+  }
+}

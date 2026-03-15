@@ -1,0 +1,148 @@
+{
+  "name": "Transaction Triggers — On Data Entry Auto-sync",
+  "nodes": [
+    {
+      "name": "New PO Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 200],
+      "parameters": {
+        "operation": "onNewRow",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Purchase Orders"
+      }
+    },
+    {
+      "name": "Notify Vendor — Email/WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "body": {
+          "to": "={{$json.vendorPhone}}",
+          "message": "📦 NEW PURCHASE ORDER\n\nPO #: {{$json.poId}}\nProject: Porur Residential Complex\nExpected Delivery: {{$json.expectedDelivery}}\nTotal Amount: ₹{{$json.totalAmount}}\n\nPlease confirm receipt."
+        }
+      }
+    },
+    {
+      "name": "Send PO Email to Vendor",
+      "type": "n8n-nodes-base.emailSend",
+      "position": [500, 300],
+      "parameters": {
+        "to": "={{$json.vendorEmail}}",
+        "subject": "Purchase Order {{$json.poId}} — Porur Construction",
+        "text": "Dear {{$json.vendorName}},\n\nPlease find the purchase order details below:\n\nPO #: {{$json.poId}}\nExpected Delivery: {{$json.expectedDelivery}}\nTotal Amount: ₹{{$json.totalAmount}}\n\nPlease confirm delivery schedule.\n\nRegards,\nPorur Construction Management"
+      }
+    },
+    {
+      "name": "GRN Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 500],
+      "parameters": {
+        "operation": "onNewRow",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "GRN / Delivery"
+      }
+    },
+    {
+      "name": "Update Inventory",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 500],
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Inventory",
+        "lookupColumn": "materialId",
+        "lookupValue": "={{$json.materialId}}",
+        "fieldsToUpdate": {
+          "totalReceived": "={{$json.currentReceived + $json.acceptedQty}}",
+          "closingStock": "={{$json.openingStock + $json.currentReceived + $json.acceptedQty - $json.totalIssued}}",
+          "lastUpdated": "={{$today.format('YYYY-MM-DD')}}"
+        }
+      }
+    },
+    {
+      "name": "Update PO Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [750, 500],
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Purchase Orders",
+        "lookupColumn": "poId",
+        "lookupValue": "={{$json.poId}}",
+        "fieldsToUpdate": { "status": "={{$json.isFullyReceived ? 'completed' : 'partial_received'}}" }
+      }
+    },
+    {
+      "name": "Payment Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 700],
+      "parameters": {
+        "operation": "onNewRow",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Payments Tracker"
+      }
+    },
+    {
+      "name": "Update Vendor Balance",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [500, 700],
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Payments Tracker",
+        "lookupColumn": "paymentId",
+        "lookupValue": "={{$json.paymentId}}",
+        "fieldsToUpdate": {
+          "balanceDue": "={{$json.invoiceAmount - $json.paidAmount}}",
+          "status": "={{$json.paidAmount >= $json.invoiceAmount ? 'paid' : 'partial'}}"
+        }
+      }
+    },
+    {
+      "name": "Task Completion Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "position": [250, 900],
+      "parameters": {
+        "operation": "onChange",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Task Tracker"
+      }
+    },
+    {
+      "name": "Check If Completed",
+      "type": "n8n-nodes-base.if",
+      "position": [500, 900],
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.status}}", "operation": "equal", "value2": "completed" }]
+        }
+      }
+    },
+    {
+      "name": "Update Schedule Progress",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [750, 900],
+      "parameters": {
+        "operation": "update",
+        "sheetId": "={{$env.GOOGLE_SPREADSHEET_ID}}",
+        "sheetName": "Project Schedule",
+        "lookupColumn": "taskId",
+        "lookupValue": "={{$json.scheduleTaskId}}",
+        "fieldsToUpdate": {
+          "percentComplete": 100,
+          "status": "completed"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "New PO Trigger": { "main": [[ { "node": "Notify Vendor — Email/WhatsApp" }, { "node": "Send PO Email to Vendor" } ]] },
+    "GRN Trigger": { "main": [[ { "node": "Update Inventory" } ]] },
+    "Update Inventory": { "main": [[ { "node": "Update PO Status" } ]] },
+    "Payment Trigger": { "main": [[ { "node": "Update Vendor Balance" } ]] },
+    "Task Completion Trigger": { "main": [[ { "node": "Check If Completed" } ]] },
+    "Check If Completed": { "main": [[ { "node": "Update Schedule Progress" } ]] }
+  }
+}
