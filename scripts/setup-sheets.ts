@@ -8,6 +8,13 @@
  *   in your environment or .env file
  */
 
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, "../apps/dashboard/.env") });
+
 import { google } from "googleapis";
 
 const SHEETS_TO_CREATE = [
@@ -94,6 +101,7 @@ async function main() {
     console.log("All sheet tabs created.");
   } catch (error) {
     console.log("Some sheets may already exist, continuing with headers...");
+    console.error("batchUpdate error:", (error as any)?.message || error);
   }
 
   // Add headers to each sheet
@@ -109,7 +117,7 @@ async function main() {
       });
       console.log(`  ✓ ${sheet.name} — ${sheet.headers.length} columns`);
     } catch (error) {
-      console.log(`  ✗ ${sheet.name} — failed`);
+      console.log(`  ✗ ${sheet.name} — failed: ${(error as any)?.message}`);
     }
   }
 
